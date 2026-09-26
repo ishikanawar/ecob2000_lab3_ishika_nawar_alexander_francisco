@@ -1,0 +1,177 @@
+---
+get(w)---
+title: "ecob2000_lab3_ishika_nawar"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+setwd("~/Documents/R Projects/ecob2000_lab3_ishika_nawar")
+load("d_HHP2020_241.Rdata")
+attach(d_HHP2020_24)
+d_HHP2020_24
+```
+
+```{r}
+summary(d_HHP2020_24)
+```
+
+```{r}
+table(Region, Mar_Stat)
+```
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(socviz)
+library(dplyr)
+```
+
+```{r}
+
+divorced_data <- d_HHP2020_24 %>%
+  filter(Mar_Stat == "divorced") %>%
+  filter(!Education %in% c("lt hs", "some hs")) %>%
+  filter(!is.na(Education))
+
+summary_data <- divorced_data %>%
+  group_by(Region, Education) %>%
+  summarize(freq = n(), .groups = "drop") %>%
+  mutate(proportion = freq / sum(freq)) %>%
+  ungroup() %>%
+  filter(!is.na(Education))
+```
+
+```{r}
+print(summary_data)
+```
+
+```{r}
+summary_data$Education <- factor(summary_data$Education, levels = c("high school", "some college", "assoc deg", "college grad", "adv degree"))
+summary_data$Region <- factor(summary_data$Region, levels = c("South", "West", "Northeast", "Midwest"))
+
+```
+
+```{r}
+div_mainbar <- ggplot(summary_data, aes(x = Region, y = proportion, fill = Education)) + geom_col(position = "dodge") + labs(
+  title = "Divorce Rate by Education Level and Region",
+  x = "Region",
+  y = "Divorce Rate",
+  fill = "Education Level")
+
+div_mainbar + theme_minimal() + scale_fill_discrete(name = "Education Level", labels = c("high school" = "High School", "some college" = "Some College", "assoc deg" = "Associate's Degree", "college grad" = "College Graduate", "adv degree" = "Advanced Degree"), palette = "Blues") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+edu_labels <- c(
+  "high school" = "High School",
+  "some college" = "Some College",
+  "assoc deg" = "Associate's Degree",
+  "college grad" = "College Graduate",
+  "adv degree" = "Advanced Degree"
+)
+
+divorced_data2 <- d_HHP2020_24 %>%
+  filter(Mar_Stat == "divorced") %>%
+  filter(!Education %in% c("lt hs", "some hs")) %>%
+  filter(!is.na(Education))
+
+summary_data2 <- divorced_data2 %>%
+  group_by(Education, Region) %>%
+  summarize(freq = n(), .groups = "drop") %>%
+  group_by(Education) %>%
+  mutate(proportion = freq / sum(freq)) %>%
+  ungroup()
+
+education_groupbar <- ggplot(summary_data2, aes(x = Region, y = proportion, fill = Region))
+education_groupbar + geom_col() + facet_wrap(~ Education, nrow = 3, labeller = labeller(Education = edu_labels)) + 
+  labs(
+    title = "Divorce Rate by Region, by Education Level",
+    x = "Region",
+    y = "Divorce Rate",
+    fill = "Region"
+  ) +
+  theme_minimal() + scale_fill_discrete(palette = "Purples") + theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+```{r}
+divorced_only <- d_HHP2020_24 %>%
+  filter(Mar_Stat == "divorced")
+
+region_summary <- divorced_only %>%
+  group_by(Region) %>%
+  summarize(freq = n(), .groups = "drop") %>%
+  mutate(proportion = freq / sum(freq))
+
+print(region_summary)
+```
+
+```{r}
+ggplot(region_summary, aes(x = "", y = proportion, fill = Region)) +
+  geom_col(width = 1) +
+  coord_polar(theta = "y") +
+  geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)),
+            position = position_stack(vjust = 0.5)) +
+  labs(
+    title = "Distribution of Divorced Individuals Across Regions",
+    fill = "Region"
+  ) +
+  theme_void() +
+  scale_fill_brewer(palette = "Oranges")
+```
+
+```{r}
+education_summary <- d_HHP2020_24 %>%
+  filter(Mar_Stat == "divorced") %>%
+  filter(!Education %in% c("lt hs", "some hs")) %>%
+  filter(!is.na(Education)) %>%
+  group_by(Education) %>%
+  summarize(freq = n(), .groups = "drop") %>%
+  mutate(proportion = freq / sum(freq))
+
+print(education_summary)
+```
+
+```{r}
+edu_labels <- c(
+  "high school" = "High School",
+  "some college" = "Some College",
+  "assoc deg" = "Associate's Degree",
+  "college grad" = "College Graduate",
+  "adv degree" = "Advanced Degree"
+)
+
+ggplot(education_summary, aes(x = "", y = proportion, fill = Education)) +
+  geom_col(width = 1) +
+  coord_polar(theta = "y") +
+  geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)),
+            position = position_stack(vjust = 0.5)) +
+  labs(
+    title = "Distribution of Divorced Individuals Across Education Levels",
+    fill = "Education Level"
+  ) +
+  theme_void() +
+  scale_fill_brewer(palette = "Greens", labels = edu_labels)
+```
