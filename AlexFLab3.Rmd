@@ -1,0 +1,356 @@
+---
+title: "Alexander Francisco Lab 3"
+output: github_document
+---
+
+```{r setup, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(kableExtra)
+
+
+load(file.choose())
+```
+
+## Check Categories
+
+```{r}
+unique(d_HHP2020_24$Region)
+unique(d_HHP2020_24$Education)
+unique(d_HHP2020_24$Mar_Stat)
+```
+
+## Prepare the Data
+
+```{r}
+
+
+HHP_divorce <- d_HHP2020_24 %>%
+  filter(
+    !is.na(Region),
+    !is.na(Education),
+    !is.na(Mar_Stat)
+  ) %>%
+  filter(
+    !str_to_lower(str_trim(as.character(Education))) %in%
+      c("lt hs", "some hs")
+  ) %>%
+  mutate(
+    divorced = as.numeric(Mar_Stat == "divorced")
+  )
+
+# 
+unique(HHP_divorce$Education)
+```
+
+## Table 1: Overall Divorce Statistics by Region
+
+```{r}
+region_stats <- HHP_divorce %>%
+  group_by(Region) %>%
+  summarize(
+    `Sample Size` = n(),
+    `Number Divorced` = sum(divorced),
+    `Divorce Rate` = mean(divorced),
+    `Standard Deviation` = sd(divorced),
+    .groups = "drop"
+  )
+
+region_stats_display <- region_stats %>%
+  mutate(
+    `Sample Size` = format(`Sample Size`, big.mark = ","),
+    `Number Divorced` = format(`Number Divorced`, big.mark = ","),
+    `Divorce Rate` = paste0(round(`Divorce Rate` * 100, 1), "%"),
+    `Standard Deviation` = round(`Standard Deviation`, 3)
+  )
+
+kable(
+  region_stats_display,
+  align = "c",
+  caption = "Table 1: Overall Divorce Statistics by Region"
+) %>%
+  kable_styling(full_width = FALSE, font_size = 14)
+```
+
+## Table 2: Divorce Statistics by Education Level
+
+```{r}
+education_stats <- HHP_divorce %>%
+  group_by(Education) %>%
+  summarize(
+    `Sample Size` = n(),
+    `Number Divorced` = sum(divorced),
+    `Divorce Rate` = mean(divorced),
+    `Standard Deviation` = sd(divorced),
+    .groups = "drop"
+  )
+
+education_stats_display <- education_stats %>%
+  mutate(
+    `Sample Size` = format(`Sample Size`, big.mark = ","),
+    `Number Divorced` = format(`Number Divorced`, big.mark = ","),
+    `Divorce Rate` = paste0(round(`Divorce Rate` * 100, 1), "%"),
+    `Standard Deviation` = round(`Standard Deviation`, 3)
+  )
+
+kable(
+  education_stats_display,
+  align = "c",
+  caption = "Table 2: Divorce Statistics by Education Level"
+) %>%
+  kable_styling(full_width = FALSE, font_size = 14)
+```
+
+## Table 3: Divorce Statistics by Region and Education
+
+```{r}
+region_education_stats <- HHP_divorce %>%
+  group_by(Region, Education) %>%
+  summarize(
+    `Sample Size` = n(),
+    `Number Divorced` = sum(divorced),
+    `Divorce Rate` = mean(divorced),
+    `Standard Deviation` = sd(divorced),
+    .groups = "drop"
+  )
+
+region_education_display <- region_education_stats %>%
+  mutate(
+    `Sample Size` = format(`Sample Size`, big.mark = ","),
+    `Number Divorced` = format(`Number Divorced`, big.mark = ","),
+    `Divorce Rate` = paste0(round(`Divorce Rate` * 100, 1), "%"),
+    `Standard Deviation` = round(`Standard Deviation`, 3)
+  )
+
+kable(
+  region_education_display,
+  align = "c",
+  caption = "Table 3: Divorce Statistics by Region and Education Level"
+) %>%
+  kable_styling(full_width = FALSE, font_size = 14)
+```
+
+## Table 4: Divorce Rates by Region and Education
+
+```{r}
+divorce_rate_table <- region_education_stats %>%
+  select(Region, Education, `Divorce Rate`) %>%
+  pivot_wider(
+    names_from = Region,
+    values_from = `Divorce Rate`
+  ) %>%
+  mutate(
+    across(
+      where(is.numeric),
+      ~ paste0(round(.x * 100, 1), "%")
+    )
+  )
+
+kable(
+  divorce_rate_table,
+  align = "c",
+  caption = "Table 4: Divorce Rates Across Regions for Each Education Level"
+) %>%
+  kable_styling(full_width = FALSE, font_size = 14)
+```
+
+## Function for Regional Comparisons
+
+```{r}
+compare_regions <- function(data, region1, region2) {
+
+  temp <- data %>%
+    filter(Region %in% c(region1, region2)) %>%
+    group_by(Education, Region) %>%
+    summarize(
+      n = n(),
+      rate = mean(divorced),
+      .groups = "drop"
+    ) %>%
+    pivot_wider(
+      names_from = Region,
+      values_from = c(n, rate)
+    )
+
+  n1 <- paste0("n_", region1)
+  n2 <- paste0("n_", region2)
+  r1 <- paste0("rate_", region1)
+  r2 <- paste0("rate_", region2)
+
+  temp %>%
+    mutate(
+      Difference = .data[[r1]] - .data[[r2]],
+      `Standard Error` = sqrt(
+        .data[[r1]] * (1 - .data[[r1]]) / .data[[n1]] +
+        .data[[r2]] * (1 - .data[[r2]]) / .data[[n2]]
+      ),
+      `95% CI Lower` = Difference - 1.96 * `Standard Error`,
+      `95% CI Upper` = Difference + 1.96 * `Standard Error`
+    ) %>%
+    transmute(
+      Education,
+      `Region 1` = region1,
+      `Region 1 Rate` = paste0(round(.data[[r1]] * 100, 1), "%"),
+      `Region 2` = region2,
+      `Region 2 Rate` = paste0(round(.data[[r2]] * 100, 1), "%"),
+      `Difference (percentage points)` = round(Difference * 100, 2),
+      `Standard Error` = round(`Standard Error`, 4),
+      `95% CI Lower` = paste0(round(`95% CI Lower` * 100, 2), "%"),
+      `95% CI Upper` = paste0(round(`95% CI Upper` * 100, 2), "%")
+    )
+}
+```
+
+## Table 5: Northeast vs. South
+
+```{r}
+NE_South_display <- compare_regions(
+  HHP_divorce,
+  "Northeast",
+  "South"
+)
+
+kable(
+  NE_South_display,
+  align = "c",
+  caption = "Table 5: Northeast vs. South Divorce Rates"
+) %>%
+  kable_styling(full_width = FALSE, font_size = 14)
+```
+
+## Table 6: Northeast vs. Midwest
+
+```{r}
+NE_Midwest_display <- compare_regions(
+  HHP_divorce,
+  "Northeast",
+  "Midwest"
+)
+
+kable(
+  NE_Midwest_display,
+  align = "c",
+  caption = "Table 6: Northeast vs. Midwest Divorce Rates"
+) %>%
+  kable_styling(full_width = FALSE, font_size = 14)
+```
+
+## Table 7: West vs. South
+
+```{r}
+West_South_display <- compare_regions(
+  HHP_divorce,
+  "West",
+  "South"
+)
+
+kable(
+  West_South_display,
+  align = "c",
+  caption = "Table 7: West vs. South Divorce Rates"
+) %>%
+  kable_styling(full_width = FALSE, font_size = 14)
+```
+
+## Table 8: West vs. Midwest
+
+```{r}
+West_Midwest_display <- compare_regions(
+  HHP_divorce,
+  "West",
+  "Midwest"
+)
+
+kable(
+  West_Midwest_display,
+  align = "c",
+  caption = "Table 8: West vs. Midwest Divorce Rates"
+) %>%
+  kable_styling(full_width = FALSE, font_size = 14)
+```
+
+## Table 9: Highest and Lowest Divorce Rate in Each Region
+
+```{r}
+highest_lowest <- region_education_stats %>%
+  group_by(Region) %>%
+  summarize(
+    `Highest Divorce Education` = as.character(
+      Education[which.max(`Divorce Rate`)]
+    ),
+    `Highest Divorce Rate` = max(`Divorce Rate`),
+    `Lowest Divorce Education` = as.character(
+      Education[which.min(`Divorce Rate`)]
+    ),
+    `Lowest Divorce Rate` = min(`Divorce Rate`),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    `Highest Divorce Rate` =
+      paste0(round(`Highest Divorce Rate` * 100, 1), "%"),
+    `Lowest Divorce Rate` =
+      paste0(round(`Lowest Divorce Rate` * 100, 1), "%")
+  )
+
+kable(
+  highest_lowest,
+  align = "c",
+  caption = "Table 9: Highest and Lowest Divorce Rates by Education Within Each Region"
+) %>%
+  kable_styling(full_width = FALSE, font_size = 14)
+```
+
+## Table 10: Distribution of Divorced Individuals Across Regions
+
+```{r}
+divorced_region_distribution <- HHP_divorce %>%
+  filter(divorced == 1) %>%
+  count(Region, name = "Number Divorced") %>%
+  mutate(
+    `Percent of All Divorced` =
+      `Number Divorced` / sum(`Number Divorced`)
+  )
+
+divorced_region_distribution_display <-
+  divorced_region_distribution %>%
+  mutate(
+    `Number Divorced` =
+      format(`Number Divorced`, big.mark = ","),
+    `Percent of All Divorced` =
+      paste0(round(`Percent of All Divorced` * 100, 1), "%")
+  )
+
+kable(
+  divorced_region_distribution_display,
+  align = "c",
+  caption = "Table 10: Distribution of Divorced Individuals Across Regions"
+) %>%
+  kable_styling(full_width = FALSE, font_size = 14)
+```
+
+## Table 11: Distribution of Divorced Individuals Across Education Levels
+
+```{r}
+divorced_education_distribution <- HHP_divorce %>%
+  filter(divorced == 1) %>%
+  count(Education, name = "Number Divorced") %>%
+  mutate(
+    `Percent of All Divorced` =
+      `Number Divorced` / sum(`Number Divorced`)
+  )
+
+divorced_education_distribution_display <-
+  divorced_education_distribution %>%
+  mutate(
+    `Number Divorced` =
+      format(`Number Divorced`, big.mark = ","),
+    `Percent of All Divorced` =
+      paste0(round(`Percent of All Divorced` * 100, 1), "%")
+  )
+
+kable(
+  divorced_education_distribution_display,
+  align = "c",
+  caption = "Table 11: Distribution of Divorced Individuals Across Education Levels"
+) %>%
+  kable_styling(full_width = FALSE, font_size = 14)
+```
